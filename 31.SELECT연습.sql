@@ -613,3 +613,196 @@ SELECT 부서.부서명
 FROM 사원 
 RIGHT JOIN 부서 ON 사원.부서번호 = 부서.부서번호
 WHERE 사원.사원번호 IS NULL;
+
+
+select 고객번호
+	,고객회사명
+    ,담당자명
+    ,마일리지
+    ,등급명
+FROM 고객
+INNER JOIN 마일리지등급
+ON 마일리지 >= 하한마일리지
+AND 마일리지 <= 상한마일리지
+WHERE 담당자명 = '이은광';
+
+
+-- 부서없는 사원까지 보는 쿼리
+SELECT 사원번호, 이름, 부서명
+FROM 사원 LEFT JOIN 부서
+ON 사원.부서번호 = 부서.부서번호;
+
+-- 사원이 없는 부서까지 보는 쿼리
+SELECT 부서.부서번호, 부서명, 사원.이름
+FROM 사원 RIGHT JOIN 부서 
+ON 사원.부서번호 = 부서.부서번호;
+
+SELECT 이름
+		,부서.*
+FROM 사원
+LEFT JOIN 부서
+ON 사원.부서번호 부서.부서번호
+WHERE 부서.부서번호 IS NULL;
+
+
+-- 주문안한 고객
+SELECT 고객.고객회사명, 고객.담당자명
+FROM 고객 LEFT JOIN 주문 ON 고객.고객번호 = 주문.고객번호
+WHERE 주문.주문번호 IS NULL;
+
+-- 셀프 조인
+-- 사원별 상사의 이름
+SELECT 사원.이름, 상사.이름
+FROM 사원 JOIN 사원 AS 상사
+ON 사원.상사번호 = 상사.사원번호;
+
+SELECT 사원.이름, 상사.이름
+FROM 사원 LEFT JOIN 사원 AS 상사
+ON 사원.상사번호 = 상사.사원번호
+WHERE 사원.상사번호 = '';
+
+SELECT 사원.사원번호
+	,사원.이름
+    ,상사.사원번호 AS '상사의 사원번호'
+    ,상사.이름 AS '상사의 이름'
+FROM 사원
+INNER JOIN 사원 AS 상사
+ON 사원.상사번호 = 상사.사원번호;
+
+
+SELECT A.고객회사명, A.담당자명, A.마일리지, B.고객회사명, B.마일리지
+FROM 고객 AS A
+LEFT JOIN 고객 AS B -- 셀프조인
+ON A.마일리지 < B.마일리지 -- A의 마일리지 < B.마일리지
+-- WHERE B.고객번호 IS NULL
+ORDER BY A.마일리지 DESC;
+
+
+-- 서브쿼리
+SELECT 고객번호, 마일리지
+FROM 고객
+WHERE 마일리지 = (
+	SELECT MAX(마일리지)
+    FROM 고객
+); -- 최고 마일리지 값
+
+
+SELECT 고객번호
+		,고객회사명
+        ,담당자명
+        ,마일리지
+FROM 고객
+WHERE 마일리지 = (SELECT MAX(마일리지)
+FROM 고객);
+
+
+-- 주문번호 = 'H0250'인 고객회사명 , 담당자명
+SELECT 고객.고객회사명, 고객.담당자명
+FROM 고객 JOIN 주문
+ON 고객.고객번호 = 주문.고객번호
+WHERE 주문번호 = 'h0250' ;
+
+-- 서브쿼리 버전
+SELECT 고객.고객회사명, 고객.담당자명
+FROM 고객
+WHERE 고객.고객번호 = (SELECT 주문.고객번호 
+						FROM 주문
+						WHERE 주문번호 = 'h0250'); -- 주문번호='h0250' 고객번호 쿼리
+
+-- 부산광역시
+SELECT 담당자명
+	   ,고객회사명
+       ,마일리지
+FROM 고객
+WHERE 마일리지 > (SELECT MIN(마일리지)
+				  FROM 고객
+                  WHERE 도시 = '부산광역시');
+
+-- 부산광역시
+SELECT 고객회사명, 마일리지
+FROM 고객
+WHRE 고객.마일리지 > (
+	SELECT MIN(마일리지)
+    FROM 고객
+    WHERE 고객.도시 = '부산광역시');  -- 서브쿼리
+
+
+-- 서브쿼리 IN 연산자
+SELECT * 
+FROM 주문
+WHERE 고객번호
+
+-- IN
+SELECT COUNT(*) AS 주문건수
+FROM 주문
+WHRE 고객번호 IN (SELECT 고객번호
+			FROM 고객
+            WHERE 도시 = '부산광역시');
+
+-- ANY
+SELECT 담당자명
+		,고객회사명
+        ,마일리지
+FROM 고객
+WHERE 마일리지 > ANY (SELECT 마일리지
+						FROM 고객
+                        WHERE 도시 = '부산광역시');
+                        
+-- ALL
+SELECT 담당자명
+	,고객회사명
+    ,마일리지
+FROM 고객
+WHERE 마일리지 > ALL (SELECT AVG(마일리지)
+					FROM 고객
+                    GROUP BY 지역);
+
+SELECT 담당자명, 고객회사명, 마일리지
+FROM 고객 a
+WHERE exists (
+	SELECT 1
+    FROM 고객 b
+	WHERE 도시 = '부산광역시' AND a.마일리지 > b.마일리지
+); -- 59 rows
+
+
+-- 조건절에 사용하는 서브쿼리
+-- Having 절
+select 도시
+	,avg(마일리지) as 평균마일리지
+from 고객
+group by 도시
+having avg(마일리지) > (select avg(마일리지)
+						from 고객);
+
+-- From 절에 들어가는 가상 테이블 > 인라인 뷰
+SELECT 담당자명
+		,고객회사명
+        ,마일리지
+        ,고객.도시
+        ,도시_평균마일리지
+        ,도시_평균마일리지 - 마일리지 AS 차이
+FROM 고객
+	,(SELECT 도시
+			,AVG(마일리지) AS 도시_평균마일리지
+	FROM 고객
+    GROUP BY 도시
+    ) AS 도시별요약
+WHERE 고객.도시 = 도시별요약.도시;
+
+
+-- 컬럼 목록에 들어가는 > 스칼라 서브쿼리
+SELECT 고객번호
+		,담당자명
+        ,(SELECT MAX(주문일)
+        FROM 주문
+        WHERE 주문.고객번호 = 고객.고객번호
+        ) AS 최종주문일
+FROM 고객;
+
+
+
+
+
+
+
