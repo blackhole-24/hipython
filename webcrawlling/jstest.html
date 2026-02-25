@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>이름 입력</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;600;700&display=swap');
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: 'Noto Sans KR', sans-serif;
+      background: #f0f4ff;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      min-height: 100vh;
+    }
+
+    .card {
+      background: #fff;
+      border-radius: 16px;
+      padding: 48px 56px;
+      box-shadow: 0 8px 32px rgba(80, 120, 255, 0.12);
+      width: 420px;
+    }
+
+    h2 {
+      font-size: 20px;
+      font-weight: 700;
+      color: #2d3a5e;
+      margin-bottom: 28px;
+      letter-spacing: -0.5px;
+    }
+
+    /* 입력 영역 */
+    .input-row {
+      display: flex;
+      gap: 10px;
+      align-items: center;
+      margin-bottom: 36px;
+    }
+
+    label {
+      font-size: 15px;
+      font-weight: 600;
+      color: #2d3a5e;
+      white-space: nowrap;
+    }
+
+    input[type="text"] {
+      flex: 1;
+      padding: 10px 14px;
+      border: 2px solid #c5d0f0;
+      border-radius: 8px;
+      font-size: 15px;
+      font-family: inherit;
+      color: #2d3a5e;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+
+    input[type="text"]:focus {
+      border-color: #5078ff;
+    }
+
+    button {
+      padding: 10px 20px;
+      background: #fff;
+      border: 2px solid #5078ff;
+      border-radius: 8px;
+      font-size: 14px;
+      font-weight: 600;
+      color: #5078ff;
+      font-family: inherit;
+      cursor: pointer;
+      transition: background 0.2s, color 0.2s;
+      white-space: nowrap;
+    }
+
+    button:hover {
+      background: #5078ff;
+      color: #fff;
+    }
+
+    /* 결과 영역 */
+    .result {
+      font-size: 16px;
+      color: #2d3a5e;
+      border-top: 1px solid #e8edf8;
+      padding-top: 24px;
+      min-height: 48px;
+    }
+
+    .result span {
+      font-weight: 700;
+      color: #5078ff;
+      border-bottom: 2px solid #c5d0f0;
+      padding-bottom: 1px;
+    }
+
+    /* 이름 등장 애니메이션 */
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(6px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+
+    .result span.animate {
+      animation: fadeIn 0.35s ease forwards;
+    }
+  </style>
+</head>
+<body>
+
+<div class="card">
+  <h2>이름을 입력해 주세요</h2>
+
+  <!-- ① 입력창  ② 버튼 -->
+  <div class="input-row">
+    <label for="nameInput">이름</label>
+    <input type="text" id="nameInput" placeholder="이름 입력" />
+    <button onclick="showName()">입력</button>
+  </div>
+
+  <!-- ③ 결과 출력 -->
+  <div class="result" id="result">
+    당신의 이름은 &nbsp;<span id="nameDisplay">_____</span>&nbsp; 입니다.
+  </div>
+</div>
+
+<script>
+  function showName() {
+    const input   = document.getElementById('nameInput').value.trim();
+    const display = document.getElementById('nameDisplay');
+
+    if (input === '') {
+      display.textContent = '_____';
+      return;
+    }
+
+    // 애니메이션 재실행을 위해 클래스 제거 후 재추가
+    display.classList.remove('animate');
+    void display.offsetWidth; // reflow 강제
+    display.textContent = input;
+    display.classList.add('animate');
+  }
+
+  // Enter 키로도 실행
+  document.getElementById('nameInput').addEventListener('keydown', function(e) {
+    if (e.key === 'Enter') showName();
+  });
+</script>
+
+</body>
+</html>
