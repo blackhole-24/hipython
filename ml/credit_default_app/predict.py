@@ -4,7 +4,7 @@ import pandas as pd
 from pathlib import Path
 
 # 모델 로드 (모듈 임포트 시 1회만 실행)
-MODEL_PATH = Path(__file__).parent / 'models' / 'credit_default_pipeline.pkl'
+MODEL_PATH = Path(__file__).parent / 'model' / 'credit_default_pipeline.pkl'
 pipeline   = joblib.load(MODEL_PATH)
 
 # 피처 순서 (학습 시와 동일하게 유지)
