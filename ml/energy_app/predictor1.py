@@ -118,7 +118,17 @@ def _build_features(df_input: pd.DataFrame) -> pd.DataFrame:
     df['d']   = df['날짜'].dt.day
     df['day'] = df['날짜'].dt.weekday + 1   # 1=월 ~ 7=일
 
-    # ── 결측치 처리 ──────────────────────────────────────────
+    # ── NaN 감지 → 행별 적용 Set 자동 결정 ──────────────────
+    # Set 판별: 결측치 채우기 전에 먼저 확인
+    has_weather = df['기온'].notna() if '기온' in df.columns else pd.Series([False]*len(df), index=df.index)
+    has_prod    = df['생산량'].notna() if '생산량' in df.columns else pd.Series([False]*len(df), index=df.index)
+
+    df['_applied_set'] = [
+        ('Set_C' if (w and p) else 'Set_B' if w else 'Set_A')
+        for w, p in zip(has_weather, has_prod)
+    ]
+
+    # ── 결측치 처리 (Set 판별 후 채움) ───────────────────────
     df['강수량']   = df['강수량'].fillna(0)
     df['풍속']     = df['풍속'].fillna(0)
     df['기온']     = df['기온'].fillna(df['기온'].median() if df['기온'].notna().any() else 15.0)
@@ -181,11 +191,11 @@ def predict(df_input: pd.DataFrame) -> dict:
     Returns
     -------
     dict : {
-        'Set_A': [{'y1': float, 'y2': float, 'y3': float, 'y4': float}, ...],
+        'Set_A': [{'peak15': float, 'peak30': float, 'peak45': float, 'peak60': float}, ...],
         'Set_B': [...],
         'Set_C': [...],
     }
-    y1=15분, y2=30분, y3=45분, y4=60분 피크 예측값 (kW)
+    peak15=15분, peak30=30분, peak45=45분, peak60=60분 피크 예측값 (kW)
     """
     pipeline = _load_pipeline()
     models       = pipeline['models']
@@ -195,7 +205,7 @@ def predict(df_input: pd.DataFrame) -> dict:
     df = _build_features(df_input)
 
     results = {}
-    target_map = {'15분': 'y1', '30분': 'y2', '45분': 'y3', '60분': 'y4'}
+    target_map = {'15분': 'peak15', '30분': 'peak30', '45분': 'peak45', '60분': 'peak60'}
 
     for set_name, feat_cols in feature_sets.items():
         # 실제로 존재하는 컬럼만 사용
@@ -215,7 +225,7 @@ def predict(df_input: pd.DataFrame) -> dict:
             X_scaled = X.values
 
         # 행별 결과 초기화
-        row_results = [{'y1': 0.0, 'y2': 0.0, 'y3': 0.0, 'y4': 0.0}
+        row_results = [{'peak15': 0.0, 'peak30': 0.0, 'peak45': 0.0, 'peak60': 0.0}
                        for _ in range(len(df))]
 
         for target, y_key in target_map.items():
@@ -232,6 +242,147 @@ def predict(df_input: pd.DataFrame) -> dict:
         results[set_name] = row_results
 
     return results
+
+# ── Set_C DataFrame 반환 함수 ─────────────────────────────────
+def predict_df(df_input: pd.DataFrame) -> pd.DataFrame:
+    """
+    Set_C 예측 결과를 DataFrame으로 반환
+
+    Parameters
+    ----------
+    df_input : DataFrame
+        predict()와 동일한 11개 컬럼 입력
+
+    Returns
+    -------
+    DataFrame : 컬럼 구성
+        hour   | peak15 | peak30 | peak45 | peak60
+        (int)  | (float)| (float)| (float)| (float)
+
+    사용 예시
+    ---------
+    df_result = predict_df(df_input)
+    df_result['peak15']          # 15분 피크 Series
+    df_result['peak15'].max()    # 최대 피크
+    df_result.iloc[10]['peak15'] # 10번째 행 15분 피크
+    """
+    result = predict(df_input)
+    set_c  = result.get('Set_C', [])
+
+    if not set_c:
+        return pd.DataFrame(columns=['feature_set', 'hour', 'peak15', 'peak30', 'peak45', 'peak60'])
+
+    # hour 컬럼 추출 (입력 df에서)
+    df_in = df_input.copy()
+    # hour 컬럼명 정규화
+    if 'hour' in df_in.columns:
+        hours = df_in['hour'].values
+    elif '시간' in df_in.columns:
+        hours = df_in['시간'].values
+    else:
+        hours = list(range(len(set_c)))
+
+    rows = []
+    for i, r in enumerate(set_c):
+        rows.append({
+            'feature_set': 'Set_C',
+            'hour':   int(hours[i]) if i < len(hours) else i,
+            'peak15': r['peak15'],
+            'peak30': r['peak30'],
+            'peak45': r['peak45'],
+            'peak60': r['peak60'],
+        })
+
+    return pd.DataFrame(rows)
+
+
+# ── 입력 행별 자동 Set 감지 + 결과 붙여서 반환 ──────────────
+def predict_with_input(df_input: pd.DataFrame) -> pd.DataFrame:
+    """
+    입력 DataFrame의 NaN 패턴을 보고 행마다 Set_A/B/C 자동 선택 후
+    입력 컬럼 + peak 결과 컬럼이 합쳐진 DataFrame 반환
+
+    Set 자동 선택 기준 (행별):
+        날씨 NaN + 생산 NaN → Set_A (달력만)
+        날씨 있음 + 생산 NaN → Set_B (달력 + 날씨)
+        날씨 있음 + 생산 있음 → Set_C (전체)
+
+    반환 컬럼:
+        입력 컬럼 전체 + applied_set + peak15 + peak30 + peak45 + peak60
+
+    사용 예시
+    ---------
+    df_result = predict_with_input(df_input)
+
+    # 결과 확인
+    print(df_result[['Date','hour','applied_set','peak15','peak30','peak45','peak60']])
+
+    # Set별 필터
+    df_result[df_result['applied_set']=='Set_C']
+    """
+    pipeline     = _load_pipeline()
+    models       = pipeline['models']
+    feature_sets = pipeline['feature_sets']
+    scalers      = pipeline['scalers']
+
+    # _build_features 호출 (내부에서 _applied_set 컬럼 생성됨)
+    df_feat = _build_features(df_input.copy())
+
+    target_map = {'15분': 'peak15', '30분': 'peak30', '45분': 'peak45', '60분': 'peak60'}
+
+    # 결과 컬럼 초기화
+    df_feat['peak15'] = 0.0
+    df_feat['peak30'] = 0.0
+    df_feat['peak45'] = 0.0
+    df_feat['peak60'] = 0.0
+
+    # Set별로 그룹핑해서 예측
+    for set_name, feat_cols in feature_sets.items():
+        # 해당 Set에 해당하는 행 인덱스
+        mask = df_feat['_applied_set'] == set_name
+        if not mask.any():
+            continue
+
+        valid_cols = [c for c in feat_cols if c in df_feat.columns]
+        if not valid_cols:
+            continue
+
+        X = df_feat.loc[mask, valid_cols]
+
+        if set_name in scalers:
+            try:
+                X_scaled = scalers[set_name].transform(X)
+            except Exception:
+                X_scaled = X.values
+        else:
+            X_scaled = X.values
+
+        for target, peak_col in target_map.items():
+            if set_name in models.get(target, {}):
+                model = models[target][set_name]
+                try:
+                    preds = model.predict(
+                        X if hasattr(model, 'n_estimators') else X_scaled
+                    )
+                except Exception:
+                    preds = model.predict(X_scaled)
+                preds = np.maximum(preds, 0)
+                df_feat.loc[mask, peak_col] = np.round(preds, 2)
+
+    # 반환: 입력 원본 컬럼 + applied_set + peak 컬럼
+    input_cols = list(df_input.columns)
+    out_cols   = input_cols + ['applied_set', 'peak15', 'peak30', 'peak45', 'peak60']
+
+    # df_feat에서 applied_set, peak 컬럼 꺼내서 df_input에 붙이기
+    df_out = df_input.copy().reset_index(drop=True)
+    df_out['applied_set'] = df_feat['_applied_set'].values
+    df_out['peak15']      = df_feat['peak15'].values
+    df_out['peak30']      = df_feat['peak30'].values
+    df_out['peak45']      = df_feat['peak45'].values
+    df_out['peak60']      = df_feat['peak60'].values
+
+    return df_out
+
 
 # ── DB에서 날짜로 자동 조회 ───────────────────────────────────
 def predict_from_db(db_path: str, date: str) -> dict:
@@ -354,12 +505,20 @@ if __name__ == '__main__':
         for set_name, rows in result.items():
             r = rows[0]
             print(f"  {set_name}: "
-                  f"15분={r['y1']:.1f}kW  "
-                  f"30분={r['y2']:.1f}kW  "
-                  f"45분={r['y3']:.1f}kW  "
-                  f"60분={r['y4']:.1f}kW")
+                  f"15분={r['peak15']:.1f}kW  "
+                  f"30분={r['peak30']:.1f}kW  "
+                  f"45분={r['peak45']:.1f}kW  "
+                  f"60분={r['peak60']:.1f}kW")
 
         print("\n✅ predictor1.py 정상 작동")
+
+        # ── predict_df() 테스트 ───────────────────────────────
+        print("\n[predict_df() 테스트 — Set_C DataFrame]")
+        df_result = predict_df(test_data)
+        print(df_result.to_string(index=False))
+        print(f"\n  peak15 값: {df_result['peak15'].values[0]} kW")
+        print(f"  peak30 값: {df_result['peak30'].values[0]} kW")
+        print("✅ predict_df() 정상 작동")
 
     except FileNotFoundError as e:
         print(f"\n❌ pkl 파일 없음: {e}")
@@ -368,6 +527,40 @@ if __name__ == '__main__':
         print(f"\n❌ 오류 발생: {e}")
         import traceback
         traceback.print_exc()
+
+    # ── predict_with_input() 테스트 ──────────────────────────
+    print("\n[predict_with_input() 테스트 — NaN 자동 Set 감지]")
+
+    # Set A: 날짜만 (날씨·생산 NaN)
+    # Set B: 날씨만 있음 (생산 NaN)
+    # Set C: 전부 있음
+    mixed_data = pd.DataFrame([
+        # Set A 구간 (0~2시: 날씨·생산 NaN)
+        {'Date':'2021-07-05','hour':0,'temperature':None,'humidity':None,
+         'windspeed':None,'rainfall':None,'op_code':None,'output':None,
+         'weekday':1,'weekend':0,'holiday':0},
+        {'Date':'2021-07-05','hour':1,'temperature':None,'humidity':None,
+         'windspeed':None,'rainfall':None,'op_code':None,'output':None,
+         'weekday':1,'weekend':0,'holiday':0},
+        # Set B 구간 (9시: 날씨만 있음)
+        {'Date':'2021-07-05','hour':9,'temperature':28.5,'humidity':72.0,
+         'windspeed':2.1,'rainfall':0.0,'op_code':None,'output':None,
+         'weekday':1,'weekend':0,'holiday':0},
+        # Set C 구간 (10시: 전부 있음)
+        {'Date':'2021-07-05','hour':10,'temperature':28.5,'humidity':72.0,
+         'windspeed':2.1,'rainfall':0.0,'op_code':1,'output':500,
+         'weekday':1,'weekend':0,'holiday':0},
+    ])
+
+    try:
+        df_result = predict_with_input(mixed_data)
+        print("\n[결과 DataFrame]")
+        print(df_result[['Date','hour','applied_set','peak15','peak30','peak45','peak60']].to_string(index=True))
+        print("\n✅ predict_with_input() 정상 작동")
+        print("   → 0,1시: Set_A / 9시: Set_B / 10시: Set_C 자동 선택")
+    except Exception as e:
+        print(f"❌ 오류: {e}")
+        import traceback; traceback.print_exc()
 
     # DB 연동 테스트 (PowerMgt.db가 있을 때만)
     db_paths = ['db/PowerMgt.db', 'PowerMgt.db']
