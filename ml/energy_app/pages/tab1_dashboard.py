@@ -112,7 +112,7 @@ def run_predict(predict_fn, using_real,
         }])
         res = predict_fn(df_in)
         r   = res['Set_C'][0]
-        return r['y1'], r['y2'], r['y3'], r['y4'], is_weekend, is_holiday
+        return r['peak15'], r['peak30'], r['peak45'], r['peak60'], is_weekend, is_holiday
     else:
         p = mock_predict(hour, month, production, gmm, furnace)
         return p, round(p*1.03,1), round(p*1.05,1), round(p*1.04,1), is_weekend, is_holiday
@@ -136,7 +136,7 @@ def run_predict_hour(predict_fn, using_real, h,
             'weekend':     is_weekend,
             'holiday':     is_holiday,
         }])
-        return predict_fn(df_h)['Set_C'][0]['y1']
+        return predict_fn(df_h)['Set_C'][0]['peak15']
     else:
         return mock_predict(h, month, production, gmm, furnace)
 
