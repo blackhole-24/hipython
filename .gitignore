@@ -23,3 +23,18 @@ media/
 esg_data_test.json
 
 data/
+
+# MNIST 학습용 이미지 (용량 큼)
+mnist_train/
+
+# YOLOv8 데이터셋 이미지/라벨
+OBJDECT/Mnist_numbers.v1i.yolov8/train/
+OBJDECT/Mnist_numbers.v1i.yolov8/valid/
+OBJDECT/Mnist_numbers.v1i.yolov8/test/
+
+# YOLOv8 학습 결과 (weights, 그래프 등)
+OBJDECT/runs*/
+runs/
+
+# 사전학습 모델 파일 (용량 큼)
+*.pt
