@@ -2,9 +2,9 @@ from fastapi import FastAPI
 
 app = FastAPI()
 
-@app.get('/')
+@app.get("/") #root url > http://ip:8000/
 def root():
-    return {'message': 'Hello, FastAPI!'}
+    return {"message": "Hello, FastAPI!"}
 
 
 @app.get("/hello/{name}")
