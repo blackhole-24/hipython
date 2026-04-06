@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>금융뉴스 감성분석</title>
+</head>
+<body>
+  <h1>금융뉴스 감성분석</h1>
+
+  <textarea id="news-input" rows="4" cols="50" 
+    placeholder="분석할 뉴스를 입력하세요."></textarea>
+  <br><br>
+  <button onclick="analyzeSentiment()">감성분석 하기</button>
+
+  <div id="result"></div>
+
+  <script>
+    function analyzeSentiment() {
+      const text = document.getElementById('news-input').value
+
+      fetch('http://localhost:8000/sentiment', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ text: text })
+      })
+      .then(response => response.json())
+      .then(data => {
+        document.getElementById('result').innerText =
+          `입력 : ${data.text}\n결과 : ${data.label}\n점수 : ${data.score}`
+      })
+    }
+  </script>
+</body>
+</html>
