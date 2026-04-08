@@ -1,0 +1,46 @@
+# 가상 환경
+venv/
+.env/
+
+# 파이썬 컴파일 파일
+*.pyc
+__pycache__/
+
+# 데이터베이스
+db.sqlite3
+*.db
+# 미디어 파일
+media/
+
+# 환경 변수 파일
+.env
+
+# IDE 설정 파일
+.idea/
+.vscode/
+
+.ipynb_checkpoints/*
+esg_data_test.json
+
+data/
+
+# MNIST 학습용 이미지 (용량 큼)
+mnist_train/
+
+# YOLOv8 데이터셋 이미지/라벨
+OBJDECT/Mnist_numbers.v1i.yolov8/train/
+OBJDECT/Mnist_numbers.v1i.yolov8/valid/
+OBJDECT/Mnist_numbers.v1i.yolov8/test/
+
+# YOLOv8 학습 결과 (weights, 그래프 등)
+OBJDECT/runs*/
+runs/
+
+# 사전학습 모델 파일 (용량 큼)
+*.pt
+
+# HuggingFace 모델/학습 결과 (용량 큼)
+hf/my-imdb-model/
+hf/results/
+hf/__pycache__/
+ml/.claude/
