@@ -1,0 +1,295 @@
+================================================================
+LLM 투자 보고서 생성 서비스 - 프로젝트 인수인계서
+작성일: 2026-04-10
+프로젝트 경로: C:\Users\Admin\hipython\llm\02_langchain_proj
+================================================================
+
+
+================================================================
+1. 프로젝트 개요
+================================================================
+
+Streamlit 기반 웹 서비스로, 사용자가 회사명을 입력하면
+MeiliSearch로 NASDAQ 종목을 검색하고, yfinance로 실시간
+재무데이터를 수집한 뒤, GPT-4o-mini로 한글 투자보고서를
+자동 생성하는 서비스.
+
+실행 URL: http://localhost:8501
+MeiliSearch 서버: http://localhost:7700
+
+
+================================================================
+2. 가상환경 및 실행 환경
+================================================================
+
+- 가상환경: langchain_rag_env (miniconda3)
+- Python 위치: C:\Users\Admin\miniconda3\envs\langchain_rag_env
+- MeiliSearch 실행파일: C:\Users\Admin\hipython\meilisearch-windows-amd64.exe
+- MeiliSearch 버전: 1.10.3
+- MeiliSearch 데이터 저장 위치: C:\Users\Admin\hipython\data.ms
+  (meilisearch-windows-amd64.exe 실행 위치 기준 ./data.ms)
+
+
+================================================================
+3. 설치된 주요 라이브러리
+================================================================
+
+- langchain-openai
+- langchain-core
+- meilisearch (v0.40.0)
+- yfinance
+- pandas
+- tabulate
+- streamlit
+- python-dotenv
+
+
+================================================================
+4. 환경변수 파일 (.env)
+================================================================
+
+파일 위치: C:\Users\Admin\hipython\llm\02_langchain_proj\.env
+
+포함된 키 (직접 확인 필요):
+  OPENAI_API_KEY=sk-proj-...
+  MEILI_SEARCH_KEY=L-F-ISeH_...
+
+주의: MIELI_SEARCH_KEY (오타) 아님. MEILI_SEARCH_KEY (정확한 스펠링)
+
+
+================================================================
+5. 전체 파일 구조
+================================================================
+
+02_langchain_proj/
+│
+├── .env                                ← API 키 보관 (gitignore 처리)
+├── app.py                              ← Streamlit 웹 서비스 진입점
+├── health_check.py                     ← 환경 진단 스크립트
+├── nasdaq_screener_1775713077275.csv   ← NASDAQ 7,082개 종목 원천데이터
+│
+├── 01_search_engine_setting.ipynb      ← MeiliSearch 인덱스 적재 (1회 실행)
+├── 02_finance_data_yahoo.ipynb         ← yfinance 동작 확인용
+├── 03_user_prompt.ipynb                ← LangChain LCEL 파이프라인 테스트
+│
+├── search/
+│    └── stock_search.py               ← 종목 검색 엔진
+│
+├── stock_info/
+│    └── stock_info.py                 ← yfinance 재무데이터 수집기
+│
+└── report_service/
+     └── investment_report.py          ← GPT-4o-mini 보고서 생성기
+
+
+================================================================
+6. 파일별 역할 및 핵심 코드 요약
+================================================================
+
+[.env]
+  역할: 모든 API 인증의 출발점. 없으면 서비스 전체 불가.
+  내용: OPENAI_API_KEY, MEILI_SEARCH_KEY
+
+[nasdaq_screener_1775713077275.csv]
+  역할: MeiliSearch에 적재할 NASDAQ 종목 원본 데이터
+  내용: Symbol, Name, Sector, Industry 등 11개 컬럼 × 7,082행
+  주의: 파일명 뒷번호가 정확해야 함 (01_search_engine_setting.ipynb에서 경로 지정)
+
+[01_search_engine_setting.ipynb]
+  역할: NASDAQ 7,082종목을 MeiliSearch에 1회 적재. 검색 기반 구축.
+  핵심 코드:
+    - load_dotenv() → MEILI_SEARCH_KEY 로드
+    - meilisearch.Client('http://localhost:7700', MEILI_SEARCH_KEY)
+    - pd.read_csv(절대경로, na_filter=False)
+    - client.index('nasdaq').add_documents(d, primary_key='id')
+  주의사항:
+    - MeiliSearch 서버가 켜진 상태에서 실행해야 함
+    - add_documents는 비동기 처리 → 완료까지 20-30초 대기 필요
+    - CSV 경로는 절대경로 사용:
+      r'C:\Users\Admin\hipython\llm\02_langchain_proj\nasdaq_screener_1775713077275.csv'
+
+[02_finance_data_yahoo.ipynb]
+  역할: yfinance 동작 확인용 (서비스에 직접 연결 안 됨)
+  핵심 코드: yf.Ticker('MSFT').history(), financials 등 테스트
+
+[03_user_prompt.ipynb]
+  역할: LangChain LCEL 파이프라인 단독 테스트. investment_report.py의 프로토타입.
+  핵심 코드:
+    - from stock_info.stock_info import Stock  ← 반드시 이 경로 사용
+    - chain = prompt | llm | output_parser
+    - chain.invoke({company, basic_info, financial_statement})
+
+[search/stock_search.py]
+  역할: 사용자 입력 텍스트 → MeiliSearch 검색 → 종목 hits 반환
+  핵심 코드:
+    from dotenv import load_dotenv
+    import os
+    load_dotenv()
+    MEILI_SEARCH_KEY = os.environ['MEILI_SEARCH_KEY']
+    import meilisearch
+    client = meilisearch.Client('http://127.0.0.1:7700', MEILI_SEARCH_KEY)
+    def stock_search(query):
+        return client.index('nasdaq').search(query)
+
+[stock_info/stock_info.py]
+  역할: 티커 심볼 → yfinance 실시간 재무데이터 수집 및 마크다운 변환
+  핵심 코드:
+    class Stock:
+        def __init__(self, symbol):
+            self.ticker = yf.Ticker(symbol)
+        def get_basic_info() → longName, industry, sector, marketCap, sharesOutstanding
+        def get_financial_statement() → 손익계산서 + 대차대조표 + 현금흐름표 (마크다운)
+  주의: reindex() 사용으로 KeyError 방지
+
+[report_service/investment_report.py]
+  역할: 기본정보 + 재무제표 → GPT-4o-mini → 한글 투자보고서 생성
+  핵심 코드:
+    llm = ChatOpenAI(model='gpt-4o-mini')
+    prompt = ChatPromptTemplate.from_messages([system, user])
+    chain = prompt | llm | StrOutputParser()
+    chain.invoke({company, business_info, financial_statements})
+
+[app.py]
+  역할: 전체 서비스의 진입점. UI 구성 및 3개 모듈 통합.
+  핵심 코드:
+    from search.stock_search import stock_search
+    from stock_info.stock_info import Stock as StockInfo
+    from report_service.investment_report import investment_report
+    st.text_input() → stock_search() → st.selectbox()
+    → StockInfo().get_basic_info() / get_financial_statement()
+    → investment_report() → st.write()
+
+[health_check.py]
+  역할: 개발/디버깅용 환경 점검 스크립트 (서비스 운영과 무관)
+  점검 항목: Python 버전, 라이브러리 설치, API 키, yfinance, MeiliSearch, Stock 클래스, investment_report import
+
+
+================================================================
+7. 데이터 흐름
+================================================================
+
+[사용자] "Apple" 입력
+    │
+    ▼
+[app.py] st.text_input()
+    │
+    ▼
+[stock_search.py] ──── 검색 쿼리 ────► [MeiliSearch localhost:7700]
+                                              (nasdaq 인덱스 / 7,082종목)
+                  ◄─── hits 반환 ───────────────────────────────────
+                  (AAPL, APLE, APLD ... 목록)
+    │
+    ▼
+[app.py] st.selectbox() → 사용자가 AAPL 선택
+    │
+    ├──► [stock_info.py] ──► [yfinance API] ──► 실시간 재무데이터
+    │         get_basic_info()                  (기업명, 시총, 주식수)
+    │         get_financial_statement()         (손익/대차/현금흐름)
+    │
+    └──► [investment_report.py]
+              재무데이터 + 프롬프트 조합
+              └──► [OpenAI API / GPT-4o-mini]
+                        └──► 한글 마크다운 투자보고서
+    │
+    ▼
+[브라우저 localhost:8501] 최종 화면 출력
+
+
+================================================================
+8. 외부 서비스 역할
+================================================================
+
+MeiliSearch (localhost:7700)
+  - NASDAQ 7,082개 종목을 빠르게 텍스트 검색
+  - "Apple" 입력 시 AAPL 등 관련 종목 즉시 반환
+  - 데이터는 data.ms 폴더에 영구 저장 (서버 재시작해도 유지)
+  - 연결 위치: stock_search.py
+
+NASDAQ CSV
+  - MeiliSearch에 적재할 종목 원본 데이터 제공
+  - Symbol + Name이 검색의 핵심 필드
+  - 연결 위치: 01_search_engine_setting.ipynb
+
+yfinance API (인터넷)
+  - 티커 심볼(AAPL)로 실시간 재무제표 수집
+  - 인터넷 연결만 있으면 최신 데이터 자동 수집
+  - 연결 위치: stock_info.py
+
+OpenAI API / GPT-4o-mini
+  - 재무데이터를 받아 한글 투자 보고서 생성
+  - LangChain LCEL 파이프라인으로 연결
+  - 연결 위치: investment_report.py
+
+
+================================================================
+9. 서비스 실행 방법 (매번 시작 시)
+================================================================
+
+[Step 1] Anaconda Prompt 창 1 열기 → MeiliSearch 서버 실행
+  conda activate langchain_rag_env
+  cd C:\Users\Admin\hipython
+  meilisearch-windows-amd64.exe --master-key [MEILI_SEARCH_KEY 값]
+  → "Server listening on: http://localhost:7700" 확인 후 이 창 유지
+
+[Step 2] Anaconda Prompt 창 2 새로 열기 → Streamlit 실행
+  conda activate langchain_rag_env
+  cd C:\Users\Admin\hipython\llm\02_langchain_proj
+  streamlit run app.py
+  → 브라우저에서 http://localhost:8501 접속
+
+주의: MeiliSearch 창을 닫으면 검색 기능이 중단됨.
+
+
+================================================================
+10. MeiliSearch 인덱스 재적재가 필요한 경우
+================================================================
+
+아래 상황에서는 01_search_engine_setting.ipynb를 재실행해야 함:
+  - MeiliSearch data.ms 폴더가 삭제된 경우
+  - 다른 경로에서 MeiliSearch를 처음 실행한 경우
+  - nasdaq 인덱스 not found 오류 발생 시
+
+재적재 순서:
+  1. MeiliSearch 서버 실행 상태에서
+  2. 01_search_engine_setting.ipynb 전체 실행
+  3. add_documents 셀 실행 후 30초 대기
+  4. search('apple') 셀로 hits 확인 후 streamlit 실행
+
+
+================================================================
+11. 주요 오류 및 해결 이력
+================================================================
+
+오류 1: KeyError: 'MIELIE_SEARCH_KEY'
+  원인: .env의 키 이름(MEILI_SEARCH_KEY)과 코드의 변수명 불일치 (오타)
+  해결: 모든 파일에서 MEILI_SEARCH_KEY로 통일
+
+오류 2: ImportError: cannot import name 'Stock' from 'stock_info'
+  원인: stock_info가 폴더(패키지)인데 from stock_info import Stock 사용
+  해결: from stock_info.stock_info import Stock
+
+오류 3: SyntaxError: 'return' outside function
+  원인: investment_report.py에서 함수 본문 들여쓰기 누락
+  해결: output_parser, chain, response, return을 4칸 들여쓰기
+
+오류 4: FileNotFoundError: nasdaq_screener_***.csv
+  원인: 상대경로 + 파일명 불일치
+  해결: 절대경로 사용 + 실제 파일명(1775713077275) 확인
+
+오류 5: index_not_found (nasdaq)
+  원인: add_documents 비동기 처리 완료 전 검색 시도
+  해결: add_documents 실행 후 30초 대기, 또는 01_search_engine_setting.ipynb 재실행
+
+
+================================================================
+12. 향후 개선 가능 사항 (참고용)
+================================================================
+
+- 항목명 세로 깨짐 현상: st.markdown() + CSS로 셀 너비 조정 가능
+- nan 값 표시: yfinance 데이터 없는 분기는 정상. 필터링 처리 가능
+- MeiliSearch 자동 실행: Windows 서비스 등록으로 PC 시작 시 자동 실행 가능
+- 서비스 배포: Streamlit Cloud 또는 Docker로 외부 배포 가능
+
+================================================================
+END OF DOCUMENT
+================================================================
