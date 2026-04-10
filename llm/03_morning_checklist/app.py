@@ -1,3 +1,6 @@
+import subprocess, sys
+subprocess.run([sys.executable, "-m", "pip", "install", "plotly"], check=False)
+
 import streamlit as st
 import plotly.graph_objects as go
 import pandas as pd
