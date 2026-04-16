@@ -1,0 +1,467 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>S3 이미지 관리</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 900px;
+            margin: 50px auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        h1 {
+            color: #333;
+            border-bottom: 3px solid #007bff;
+            padding-bottom: 10px;
+        }
+        h2 {
+            color: #444;
+            margin-top: 30px;
+        }
+
+        /* 업로드 섹션 */
+        .upload-section {
+            background: white;
+            border-radius: 8px;
+            padding: 24px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+            margin-bottom: 30px;
+        }
+        .upload-area {
+            border: 2px dashed #007bff;
+            border-radius: 8px;
+            padding: 30px;
+            text-align: center;
+            cursor: pointer;
+            transition: background 0.2s;
+            color: #555;
+        }
+        .upload-area:hover, .upload-area.drag-over {
+            background: #f0f8ff;
+        }
+        .upload-area input[type="file"] {
+            display: none;
+        }
+        .upload-area .icon {
+            font-size: 48px;
+            display: block;
+            margin-bottom: 10px;
+        }
+        #previewImg {
+            max-width: 200px;
+            max-height: 200px;
+            margin-top: 16px;
+            border-radius: 6px;
+            display: none;
+            border: 1px solid #ddd;
+        }
+        #selectedFileName {
+            margin-top: 10px;
+            font-size: 14px;
+            color: #555;
+        }
+        .btn-upload {
+            margin-top: 16px;
+            background: #007bff;
+            color: white;
+            border: none;
+            padding: 10px 28px;
+            border-radius: 6px;
+            font-size: 15px;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+        .btn-upload:hover { background: #0056b3; }
+        .btn-upload:disabled { background: #aaa; cursor: not-allowed; }
+
+        /* 파일 목록 */
+        .files {
+            background: white;
+            border-radius: 8px;
+            padding: 20px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+        }
+        .file-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+            gap: 16px;
+            margin-top: 16px;
+        }
+        .file-card {
+            border: 1px solid #e0e0e0;
+            border-radius: 8px;
+            overflow: hidden;
+            background: #fafafa;
+            transition: box-shadow 0.2s;
+        }
+        .file-card:hover {
+            box-shadow: 0 4px 12px rgba(0,0,0,0.12);
+        }
+        .file-card .thumb {
+            width: 100%;
+            height: 140px;
+            object-fit: cover;
+            display: block;
+            background: #eee;
+        }
+        .file-card .thumb-placeholder {
+            width: 100%;
+            height: 140px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 40px;
+            background: #f0f0f0;
+        }
+        .file-card .card-body {
+            padding: 10px;
+        }
+        .file-card .card-name {
+            font-size: 12px;
+            color: #333;
+            word-break: break-all;
+            margin-bottom: 6px;
+        }
+        .file-card .card-size {
+            font-size: 11px;
+            color: #888;
+            margin-bottom: 8px;
+        }
+        .card-actions {
+            display: flex;
+            gap: 6px;
+        }
+        .btn-view {
+            flex: 1;
+            background: #17a2b8;
+            color: white;
+            border: none;
+            padding: 6px 0;
+            border-radius: 4px;
+            font-size: 12px;
+            cursor: pointer;
+            text-decoration: none;
+            text-align: center;
+            transition: background 0.2s;
+        }
+        .btn-view:hover { background: #138496; }
+        .btn-delete {
+            flex: 1;
+            background: #dc3545;
+            color: white;
+            border: none;
+            padding: 6px 0;
+            border-radius: 4px;
+            font-size: 12px;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+        .btn-delete:hover { background: #a71d2a; }
+
+        /* 공통 상태 */
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: #666;
+        }
+        .error {
+            background: #fff3cd;
+            border: 1px solid #ffc107;
+            padding: 15px;
+            border-radius: 5px;
+            color: #856404;
+        }
+        .success {
+            background: #d4edda;
+            border: 1px solid #28a745;
+            padding: 10px 15px;
+            border-radius: 5px;
+            color: #155724;
+            margin-bottom: 15px;
+        }
+        .info-bar {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 8px;
+        }
+        .btn-refresh {
+            background: #6c757d;
+            color: white;
+            border: none;
+            padding: 6px 14px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 13px;
+        }
+        .btn-refresh:hover { background: #495057; }
+
+        /* 진행 표시 */
+        .progress-bar {
+            width: 100%;
+            background: #e9ecef;
+            border-radius: 4px;
+            height: 8px;
+            margin-top: 12px;
+            display: none;
+        }
+        .progress-bar .bar {
+            height: 100%;
+            background: #007bff;
+            border-radius: 4px;
+            width: 0%;
+            transition: width 0.3s;
+        }
+    </style>
+</head>
+<body>
+    <h1>📁 S3 이미지 관리</h1>
+    <p style="color: #666;">버킷: dev-insta-uploaded-files-07</p>
+
+    <!-- 이미지 업로드 -->
+    <div class="upload-section">
+        <h2>📤 이미지 업로드</h2>
+        <div class="upload-area" id="uploadArea">
+            <span class="icon">🖼️</span>
+            <div>이미지를 여기에 드래그하거나 클릭해서 선택하세요</div>
+            <div style="font-size:12px; color:#aaa; margin-top:6px;">JPG, PNG, GIF, WEBP 지원</div>
+            <input type="file" id="fileInput" accept="image/*">
+            <img id="previewImg" alt="미리보기">
+            <div id="selectedFileName"></div>
+        </div>
+        <div class="progress-bar" id="progressBar"><div class="bar" id="progressFill"></div></div>
+        <div style="text-align:center;">
+            <button class="btn-upload" id="uploadBtn" disabled onclick="uploadImage()">업로드</button>
+        </div>
+        <div id="uploadStatus"></div>
+    </div>
+
+    <!-- 파일 목록 -->
+    <div class="files">
+        <div class="info-bar">
+            <h2 style="margin:0;">📋 파일 목록</h2>
+            <button class="btn-refresh" onclick="loadFiles()">🔄 새로고침</button>
+        </div>
+        <div id="fileList">
+            <div class="loading">파일 목록을 불러오는 중...</div>
+        </div>
+    </div>
+
+    <script>
+        // ★ FastAPI 서버 주소를 여기에 설정하세요
+        const API_BASE_URL = 'http://127.0.0.1:8000';
+
+        const bucket = 'dev-insta-uploaded-files-07';
+        const region = 'ap-northeast-2';
+        let selectedFile = null;
+
+        // ────────────────────────────────────────
+        // 파일 선택 & 드래그앤드롭
+        // ────────────────────────────────────────
+        const uploadArea = document.getElementById('uploadArea');
+        const fileInput  = document.getElementById('fileInput');
+
+        uploadArea.addEventListener('click', () => fileInput.click());
+
+        uploadArea.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            uploadArea.classList.add('drag-over');
+        });
+        uploadArea.addEventListener('dragleave', () => uploadArea.classList.remove('drag-over'));
+        uploadArea.addEventListener('drop', (e) => {
+            e.preventDefault();
+            uploadArea.classList.remove('drag-over');
+            const file = e.dataTransfer.files[0];
+            if (file) handleFileSelect(file);
+        });
+
+        fileInput.addEventListener('change', () => {
+            if (fileInput.files[0]) handleFileSelect(fileInput.files[0]);
+        });
+
+        function handleFileSelect(file) {
+            selectedFile = file;
+            document.getElementById('selectedFileName').textContent = `선택된 파일: ${file.name} (${formatSize(file.size)})`;
+            document.getElementById('uploadBtn').disabled = false;
+
+            // 미리보기
+            if (file.type.startsWith('image/')) {
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    const img = document.getElementById('previewImg');
+                    img.src = e.target.result;
+                    img.style.display = 'block';
+                };
+                reader.readAsDataURL(file);
+            }
+        }
+
+        // ────────────────────────────────────────
+        // 이미지 업로드  POST /images
+        // ────────────────────────────────────────
+        async function uploadImage() {
+            if (!selectedFile) return;
+
+            const btn      = document.getElementById('uploadBtn');
+            const status   = document.getElementById('uploadStatus');
+            const progress = document.getElementById('progressBar');
+            const fill     = document.getElementById('progressFill');
+
+            btn.disabled = true;
+            progress.style.display = 'block';
+            fill.style.width = '30%';
+            status.innerHTML = '';
+
+            const formData = new FormData();
+            formData.append('file', selectedFile);
+
+            try {
+                fill.style.width = '60%';
+                const res = await fetch(`${API_BASE_URL}/images`, {
+                    method: 'POST',
+                    body: formData
+                });
+
+                fill.style.width = '100%';
+
+                if (!res.ok) {
+                    const err = await res.json();
+                    throw new Error(err.detail || `HTTP ${res.status}`);
+                }
+
+                const data = await res.json();
+                status.innerHTML = `<div class="success">✅ 업로드 완료: <a href="${data.url}" target="_blank">${data.filename}</a></div>`;
+
+                // 초기화
+                selectedFile = null;
+                fileInput.value = '';
+                document.getElementById('previewImg').style.display = 'none';
+                document.getElementById('selectedFileName').textContent = '';
+                btn.disabled = true;
+
+                await loadFiles();  // 목록 갱신
+            } catch (err) {
+                status.innerHTML = `<div class="error">❌ 업로드 실패: ${err.message}</div>`;
+            } finally {
+                setTimeout(() => {
+                    progress.style.display = 'none';
+                    fill.style.width = '0%';
+                }, 600);
+                btn.disabled = false;
+            }
+        }
+
+        // ────────────────────────────────────────
+        // 파일 목록 조회  GET /images
+        // ────────────────────────────────────────
+        async function loadFiles() {
+            document.getElementById('fileList').innerHTML = '<div class="loading">파일 목록을 불러오는 중...</div>';
+
+            try {
+                const res = await fetch(`${API_BASE_URL}/images`);
+
+                if (!res.ok) throw new Error(`HTTP ${res.status}`);
+
+                const data = await res.json();
+                const images = data.images || [];
+
+                if (images.length === 0) {
+                    document.getElementById('fileList').innerHTML = '<div class="loading">📭 버킷이 비어있습니다.</div>';
+                    return;
+                }
+
+                let html = `<div class="success">✅ 총 ${data.count}개의 파일</div><div class="file-grid">`;
+
+                for (const img of images) {
+                    const isImage = img.filename.match(/\.(jpg|jpeg|png|gif|webp)$/i);
+                    const icon = isImage ? '' : getFileIcon(img.filename);
+                    const safeFilename = encodeURIComponent(img.filename);
+
+                    html += `
+                        <div class="file-card" id="card-${safeFilename}">
+                            ${isImage
+                                ? `<img class="thumb" src="${img.url}" alt="${img.filename}" loading="lazy" onerror="this.style.display='none'">`
+                                : `<div class="thumb-placeholder">${icon}</div>`
+                            }
+                            <div class="card-body">
+                                <div class="card-name" title="${img.filename}">${img.filename}</div>
+                                <div class="card-size">${formatSize(img.size)}</div>
+                                <div class="card-actions">
+                                    <a class="btn-view" href="${img.url}" target="_blank">보기</a>
+                                    <button class="btn-delete" onclick="deleteImage('${img.filename}', '${safeFilename}')">삭제</button>
+                                </div>
+                            </div>
+                        </div>`;
+                }
+
+                html += '</div>';
+                document.getElementById('fileList').innerHTML = html;
+
+            } catch (err) {
+                document.getElementById('fileList').innerHTML = `
+                    <div class="error">
+                        <strong>❌ 오류 발생:</strong> ${err.message}<br><br>
+                        <strong>확인 사항:</strong><br>
+                        • FastAPI 서버가 실행 중인지 확인 (${API_BASE_URL})<br>
+                        • FastAPI에 CORS 설정이 되어 있는지 확인<br>
+                        • F12 콘솔에서 상세 오류 확인
+                    </div>`;
+            }
+        }
+
+        // ────────────────────────────────────────
+        // 이미지 삭제  DELETE /images/{filename}
+        // ────────────────────────────────────────
+        async function deleteImage(filename, safeFilename) {
+            if (!confirm(`"${filename}" 을(를) 삭제할까요?`)) return;
+
+            const card = document.getElementById(`card-${safeFilename}`);
+            if (card) {
+                card.style.opacity = '0.4';
+                card.style.pointerEvents = 'none';
+            }
+
+            try {
+                const res = await fetch(`${API_BASE_URL}/images/${encodeURIComponent(filename)}`, {
+                    method: 'DELETE'
+                });
+
+                if (!res.ok) {
+                    const err = await res.json();
+                    throw new Error(err.detail || `HTTP ${res.status}`);
+                }
+
+                await loadFiles();  // 목록 갱신
+            } catch (err) {
+                alert(`삭제 실패: ${err.message}`);
+                if (card) {
+                    card.style.opacity = '1';
+                    card.style.pointerEvents = 'auto';
+                }
+            }
+        }
+
+        // ────────────────────────────────────────
+        // 유틸
+        // ────────────────────────────────────────
+        function formatSize(bytes) {
+            if (bytes < 1024) return `${bytes} B`;
+            if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+            return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+        }
+
+        function getFileIcon(name) {
+            if (name.match(/\.(txt|md)$/i))   return '📝';
+            if (name.match(/\.(json|xml)$/i))  return '📋';
+            if (name.match(/\.(html|htm)$/i))  return '🌐';
+            return '📄';
+        }
+
+        // 초기 로드
+        loadFiles();
+    </script>
+</body>
+</html>
